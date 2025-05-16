@@ -1,134 +1,135 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 
-// WiFi данные
-const char* ssid = "YOUR_SSID";
-const char* password = "YOUR_PASSWORD";
+// Настройки WiFi
+const char* ssid = "ИМЯ";       // Замените на ваш SSID
+const char* password = "ПАРОЛЬ"; // Замените на ваш пароль
 
-// Пины для светодиодов. 
-// Проверьте пины GPIO вашей платы ESP32-C3 Supermini! 
-// Наиболее распространённые пины: 8, 9, 10, 11 (но ваша плата может отличаться)
-const int ledPins[3] = {9, 10, 11}; // Замените на актуальные пины вашей платы
+// Пины светодиодов (G1, G2, G3) - выберите подходящие GPIO для вашей платы
+const int ledPins[3] = {4, 5, 6};  // Пример: GPIO 4, 5, 6
 
-// Трек-номера для проверки (до 3)
+// Трек-номера (до 3)
 const char* trackingNumbers[3] = {
-  "RB123456789CN",
-  "RB987654321CN",
-  "RB555555555CN"
+  "ТРЕКНОМЕР",        // Замените на ваш первый трек-номер
+  "ТРЕКНОМЕР",     // Замените на ваш второй трек-номер
+  "ТРЕКНОМЕР"         // Замените на ваш третий трек-номер
 };
 
-// Время задержки (мс)
-const unsigned long FIRST_CHECK_DELAY = 30000;             // 30 секунд
-const unsigned long REGULAR_CHECK_INTERVAL = 2UL*60*60*1000; // 2 часа
+// Интервалы
+const unsigned long FIRST_CHECK_DELAY = 30000UL; // 30 секунд
+const unsigned long REGULAR_CHECK_INTERVAL = 2UL * 60UL * 60UL * 1000UL; // 2 часа
 
+// Таймеры
 unsigned long lastCheckMillis = 0;
 bool firstCheckDone = false;
 
-const int MAX_RETRIES = 3;
-const unsigned long RETRY_DELAY_MS = 5000;
+// Максимум попыток запроса при ошибках для одного трек-номера
+const int MAX_RETRIES = 5;
+const unsigned long RETRY_DELAY = 5000; // 5 секунд между попытками
 
-// Ключевые слова для определения статуса "пришла посылка"
+// Ключевые фразы, указывающие на то, что посылку можно забрать
 const char* statusKeywords[] = {
   "прибыла в пункт выдачи",
   "посылка готова к выдаче",
   "можно забрать",
   "пришла в пункт выдачи",
-  "ожидает получения"
+  "ожидает получения",
+  "пункт выдачи",
+  "посылка доставлена",
+  "Посылка доставлена"
 };
 
-// Функция подключения к WiFi
+// Подключаемся к WiFi с логом
 void connectToWiFi() {
-  Serial.printf("Подключение к WiFi SSID: %s\n", ssid);
+  Serial.printf("Подключение к WiFi сети '%s'...\n", ssid);
   WiFi.begin(ssid, password);
-  int waitSec = 0;
+  int attempts = 0;
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
-    waitSec++;
-    if(waitSec >= 40) {
-      Serial.println("\nОшибка подключения к WiFi!");
+    attempts++;
+    if (attempts > 60) { // ~30 секунд таймаут
+      Serial.println("\nОшибка подключения к WiFi. Проверьте настройки и перезапустите устройство.");
       return;
     }
   }
-  Serial.println("\nWiFi подключен!");
-  Serial.print("IP адрес: ");
+  Serial.println("\nWiFi подключен.");
+  Serial.print("IP адрес устройства: ");
   Serial.println(WiFi.localIP());
 }
 
-// Проверка содержит ли HTML страницы ключевое слово "посылка пришла"
-bool isPackageArrived(const String& payload) {
-  for (auto kw : statusKeywords) {
-    if (payload.indexOf(kw) >= 0) {
-      Serial.printf("Найден статус: \"%s\"\n", kw);
+// Проверка содержимого страницы на ключевые слова
+bool isPackageArrived(const String& html) {
+  for (int i = 0; i < sizeof(statusKeywords) / sizeof(statusKeywords[0]); i++) {
+    if (html.indexOf(statusKeywords[i]) >= 0) {
+      Serial.printf("Найден признак того, что посылка доступна: \"%s\"\n", statusKeywords[i]);
       return true;
     }
   }
   return false;
 }
 
-// Проверяем трек-номер с ретраями
+// Функция запроса статуса трек-номера с ретраями
 bool checkTrackingNumber(const char* trackingNumber) {
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi не подключен, пропуск проверки");
+    Serial.println("WiFi не подключен. Пропускаем проверку.");
     return false;
   }
 
-  String url = String("https://gdeposylka.ru/tracking/") + trackingNumber;
-  Serial.printf("Проверка трек-номера: %s\n", trackingNumber);
+  String url = String("https://gdeposylka.ru/courier/cainiao/tracking/") + trackingNumber;
+  Serial.printf("Проверка трек-номера %s\n", trackingNumber);
 
   HTTPClient http;
+  String responsePayload;
   int attempt = 0;
-  bool arrived = false;
   bool success = false;
+  bool arrived = false;
 
-  while(attempt < MAX_RETRIES && !success) {
+  while (attempt < MAX_RETRIES && !success) {
     http.begin(url);
     int httpCode = http.GET();
 
     if (httpCode == HTTP_CODE_OK) {
-      String payload = http.getString();
+      responsePayload = http.getString();
       success = true;
-      Serial.printf("Получен ответ, код: %d, длина страницы: %d символов\n", httpCode, payload.length());
-      arrived = isPackageArrived(payload);
+      Serial.printf("Успешно получен ответ для %s (код %d).\n", trackingNumber, httpCode);
 
-      if(payload.length() < 100) {
-        Serial.println("Внимание: очень короткая страница, возможно ошибка сервера.");
+      if (responsePayload.length() < 100) {
+        Serial.println("Внимание: получен короткий ответ, возможно проблема с сайтом.");
       }
+
+      arrived = isPackageArrived(responsePayload);
+      
     } else {
-      Serial.printf("Ошибка HTTP: %d, попытка %d из %d\n", httpCode, attempt+1, MAX_RETRIES);
+      Serial.printf("Ошибка HTTP для %s: код %d. Попытка %d из %d.\n", trackingNumber, httpCode, attempt + 1, MAX_RETRIES);
       attempt++;
       http.end();
-      if(attempt < MAX_RETRIES) {
-        Serial.printf("Повтор запроса через %d мс\n", RETRY_DELAY_MS);
-        delay(RETRY_DELAY_MS);
+      if (attempt < MAX_RETRIES) {
+        Serial.printf("Повторная попытка через %d мс...\n", RETRY_DELAY);
+        delay(RETRY_DELAY);
       }
     }
-    http.end();
   }
 
   if (!success) {
-    Serial.println("Не удалось получить ответ после всех попыток.");
+    Serial.printf("Не удалось получить корректный ответ для %s после %d попыток.\n", trackingNumber, MAX_RETRIES);
   }
 
+  http.end();
   return arrived;
 }
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);
-  Serial.println("=== Запуск ESP32-C3 SuperMini - проверка трек-номеров gdeposylka.ru ===");
+  delay(1000); // Немного подождать Serial
 
-  // Инициализация пинов светодиодов и тест подсветки
-  for(int i = 0; i < 3; i++) {
+  Serial.println("=== Запуск ESP32-C3 SuperMini. Проверка статусов посылок ===");
+
+  // Инициируем пины светодиодов
+  for (int i = 0; i < 3; i++) {
     pinMode(ledPins[i], OUTPUT);
     digitalWrite(ledPins[i], LOW);
   }
-
-  Serial.println("Тест включения всех светодиодов 1 секунду...");
-  for(int i = 0; i < 3; i++) digitalWrite(ledPins[i], HIGH);
-  delay(1000);
-  for(int i = 0; i < 3; i++) digitalWrite(ledPins[i], LOW);
-  Serial.println("Тест завершён.");
 
   connectToWiFi();
 
@@ -137,35 +138,42 @@ void setup() {
 }
 
 void loop() {
-  unsigned long now = millis();
+  unsigned long currentMillis = millis();
 
   if (!firstCheckDone) {
-    if(now - lastCheckMillis >= FIRST_CHECK_DELAY) {
-      Serial.println("=== Первая проверка трек-номеров ===");
-      for(int i = 0; i < 3; i++) {
-        if(strlen(trackingNumbers[i]) == 0) continue;
+    if (currentMillis - lastCheckMillis >= FIRST_CHECK_DELAY) {
+      Serial.println("=== Первая проверка посылок ===");
+
+      for (int i = 0; i < 3; i++) {
+        if (strlen(trackingNumbers[i]) == 0) continue;
+
+        Serial.printf("Проверяем посылку %d: %s\n", i + 1, trackingNumbers[i]);
         bool arrived = checkTrackingNumber(trackingNumbers[i]);
         digitalWrite(ledPins[i], arrived ? HIGH : LOW);
-        Serial.printf("Светодиод %d -> %s\n", ledPins[i], arrived ? "ВКЛ" : "ВЫКЛ");
+        Serial.printf("LED %d -> %s\n", ledPins[i], arrived ? "ВКЛЮЧЕН" : "ВЫКЛЮЧЕН");
       }
-      lastCheckMillis = now;
-      firstCheckDone = true;
+
       Serial.println("=== Первая проверка завершена ===");
+      lastCheckMillis = currentMillis;
+      firstCheckDone = true;
     }
   } else {
-    if(now - lastCheckMillis >= REGULAR_CHECK_INTERVAL) {
-      Serial.println("=== Регулярная проверка трек-номеров ===");
-      for(int i = 0; i < 3; i++) {
-        if(strlen(trackingNumbers[i]) == 0) continue;
+    if (currentMillis - lastCheckMillis >= REGULAR_CHECK_INTERVAL) {
+      Serial.println("=== Плановая проверка посылок ===");
+
+      for (int i = 0; i < 3; i++) {
+        if (strlen(trackingNumbers[i]) == 0) continue;
+
+        Serial.printf("Проверяем посылку %d: %s\n", i + 1, trackingNumbers[i]);
         bool arrived = checkTrackingNumber(trackingNumbers[i]);
         digitalWrite(ledPins[i], arrived ? HIGH : LOW);
-        Serial.printf("Светодиод %d -> %s\n", ledPins[i], arrived ? "ВКЛ" : "ВЫКЛ");
+        Serial.printf("LED %d -> %s\n", ledPins[i], arrived ? "ВКЛЮЧЕН" : "ВЫКЛЮЧЕН");
       }
-      lastCheckMillis = now;
-      Serial.println("=== Регулярная проверка завершена ===");
+
+      Serial.println("=== Плановая проверка завершена ===");
+      lastCheckMillis = currentMillis;
     }
   }
 
   delay(1000);
 }
-
