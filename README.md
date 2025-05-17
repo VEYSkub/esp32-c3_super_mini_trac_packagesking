@@ -44,3 +44,6 @@ const char* statusKeywords[] = {
   "посылка доставлена",
   "Посылка доставлена"
 };
+
+
+Добавлен вебсайт в [V2.0](https://github.com/VEYSkub/esp32-c3_super_mini_trac_packagesking/releases/tag/v2.0)
