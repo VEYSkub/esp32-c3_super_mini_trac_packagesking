@@ -7,11 +7,10 @@
 // Пины светодиодов (G1, G2, G3) - выберите подходящие GPIO для вашей платы
 const int ledPins[3] = {4, 5, 6};  // Пример: GPIO 4, 5, 6
 
-https://smarthomescene.com/wp-content/uploads/2024/10/diy-bluetooth-proxies-with-smallest-esp32-c3-supermini-board-pinout-1024x575.jpg
 
+[пины](https://github.com/user-attachments/assets/8e6db081-f6ac-464b-8395-5397175082bf)
 
-Добавление платы в Arduino IDE
-https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+Добавление [платы](https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json) в Arduino IDE
 
 
 Проверяет статус сразу 3 посылок.
@@ -46,4 +45,4 @@ const char* statusKeywords[] = {
 };
 
 
-Добавлен вебсайт в [V2.0](https://github.com/VEYSkub/esp32-c3_super_mini_trac_packagesking/releases/tag/v2.0)
+Добавлен вебсайт для ввода трек-номеров в [V2.0](https://github.com/VEYSkub/esp32-c3_super_mini_trac_packagesking/releases/tag/v2.0)
