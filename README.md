@@ -10,6 +10,10 @@ const int ledPins[3] = {4, 5, 6};  // Пример: GPIO 4, 5, 6
 https://smarthomescene.com/wp-content/uploads/2024/10/diy-bluetooth-proxies-with-smallest-esp32-c3-supermini-board-pinout-1024x575.jpg
 
 
+Добавление платы в Arduino IDE
+https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+
+
 Проверяет статус сразу 3 посылок.
 
 // Трек-номера (до 3)
